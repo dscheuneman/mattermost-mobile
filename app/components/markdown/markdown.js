@@ -8,7 +8,7 @@ import PropTypes from 'prop-types';
 import {
     Platform,
     Text,
-    View
+    View,
 } from 'react-native';
 
 import AtMention from 'app/components/at_mention';
@@ -24,59 +24,31 @@ import MarkdownImage from './markdown_image';
 import MarkdownLink from './markdown_link';
 import MarkdownList from './markdown_list';
 import MarkdownListItem from './markdown_list_item';
+import MarkdownTable from './markdown_table';
+import MarkdownTableImage from './markdown_table_image';
+import MarkdownTableRow from './markdown_table_row';
+import MarkdownTableCell from './markdown_table_cell';
 import {addListItemIndices, pullOutImages} from './transform';
 
 export default class Markdown extends PureComponent {
     static propTypes = {
         baseTextStyle: CustomPropTypes.Style,
         blockStyles: PropTypes.object,
-        emojiSizes: PropTypes.object,
-        fontSizes: PropTypes.object,
         isEdited: PropTypes.bool,
         isSearchResult: PropTypes.bool,
         navigator: PropTypes.object.isRequired,
         onLongPress: PropTypes.func,
+        onPermalinkPress: PropTypes.func,
         onPostPress: PropTypes.func,
         textStyles: PropTypes.object,
         theme: PropTypes.object.isRequired,
-        value: PropTypes.string.isRequired
+        value: PropTypes.string.isRequired,
     };
 
     static defaultProps = {
         textStyles: {},
         blockStyles: {},
-        emojiSizes: {
-            ...Platform.select({
-                ios: {
-                    heading1: 25,
-                    heading2: 25,
-                    heading3: 25,
-                    heading4: 25,
-                    heading5: 25,
-                    heading6: 25,
-                    text: 20
-                },
-                android: {
-                    heading1: 60,
-                    heading2: 60,
-                    heading3: 60,
-                    heading4: 60,
-                    heading5: 60,
-                    heading6: 60,
-                    text: 45
-                }
-            })
-        },
-        fontSizes: {
-            heading1: 17,
-            heading2: 17,
-            heading3: 17,
-            heading4: 17,
-            heading5: 17,
-            heading6: 17,
-            text: 15
-        },
-        onLongPress: () => true
+        onLongPress: () => true,
     };
 
     constructor(props) {
@@ -116,17 +88,21 @@ export default class Markdown extends PureComponent {
                 htmlBlock: this.renderHtml,
                 htmlInline: this.renderHtml,
 
-                editedIndicator: this.renderEditedIndicator
+                table: this.renderTable,
+                table_row: MarkdownTableRow,
+                table_cell: MarkdownTableCell,
+
+                editedIndicator: this.renderEditedIndicator,
             },
             renderParagraphsInLists: true,
-            getExtraPropsForNode: this.getExtraPropsForNode
+            getExtraPropsForNode: this.getExtraPropsForNode,
         });
     }
 
     getExtraPropsForNode = (node) => {
         const extraProps = {
             continue: node.continue,
-            index: node.index
+            index: node.index,
         };
 
         if (node.type === 'image') {
@@ -146,9 +122,10 @@ export default class Markdown extends PureComponent {
             // If this text is displayed, it will be styled by the image component
             return <Text>{literal}</Text>;
         }
+        const style = this.computeTextStyle(this.props.baseTextStyle, context);
 
         // Construct the text style based off of the parents of this node since RN's inheritance is limited
-        return <Text style={this.computeTextStyle(this.props.baseTextStyle, context)}>{literal}</Text>;
+        return <Text style={style}>{literal}</Text>;
     }
 
     renderCodeSpan = ({context, literal}) => {
@@ -156,6 +133,21 @@ export default class Markdown extends PureComponent {
     }
 
     renderImage = ({linkDestination, reactChildren, context, src}) => {
+        if (context.indexOf('table') !== -1) {
+            // We have enough problems rendering images as is, so just render a link inside of a table
+            return (
+                <MarkdownTableImage
+                    linkDestination={linkDestination}
+                    onLongPress={this.props.onLongPress}
+                    source={src}
+                    textStyle={[this.computeTextStyle(this.props.baseTextStyle, context), this.props.textStyles.link]}
+                    navigator={this.props.navigator}
+                >
+                    {reactChildren}
+                </MarkdownTableImage>
+            );
+        }
+
         return (
             <MarkdownImage
                 linkDestination={linkDestination}
@@ -193,23 +185,10 @@ export default class Markdown extends PureComponent {
     }
 
     renderEmoji = ({context, emojiName, literal}) => {
-        let size;
-        let fontSize;
-        const headingType = context.find((type) => type.startsWith('heading'));
-        if (headingType) {
-            size = this.props.emojiSizes[headingType];
-            fontSize = this.props.fontSizes[headingType];
-        } else {
-            size = this.props.emojiSizes.text;
-            fontSize = this.props.fontSizes.text;
-        }
-
         return (
             <Emoji
                 emojiName={emojiName}
                 literal={literal}
-                size={size}
-                fontSize={fontSize}
                 textStyle={this.computeTextStyle(this.props.baseTextStyle, context)}
             />
         );
@@ -225,7 +204,6 @@ export default class Markdown extends PureComponent {
         if (!first) {
             blockStyle.push(this.props.blockStyles.adjacentParagraph);
         }
-
         return (
             <View style={blockStyle}>
                 <Text>
@@ -236,11 +214,14 @@ export default class Markdown extends PureComponent {
     }
 
     renderHeading = ({children, level}) => {
-        const style = getStyleSheet(this.props.theme);
-
+        const containerStyle = [
+            getStyleSheet(this.props.theme).block,
+            this.props.blockStyles[`heading${level}`],
+        ];
+        const textStyle = this.props.blockStyles[`heading${level}Text`];
         return (
-            <View style={[style.block, this.props.blockStyles[`heading${level}`]]}>
-                <Text>
+            <View style={containerStyle}>
+                <Text style={textStyle}>
                     {children}
                 </Text>
             </View>
@@ -327,11 +308,20 @@ export default class Markdown extends PureComponent {
         return rendered;
     }
 
+    renderTable = ({children}) => {
+        return (
+            <MarkdownTable navigator={this.props.navigator}>
+                {children}
+            </MarkdownTable>
+        );
+    }
+
     renderLink = ({children, href}) => {
         return (
             <MarkdownLink
                 href={href}
                 onLongPress={this.props.onLongPress}
+                onPermalinkPress={this.props.onPermalinkPress}
             >
                 {children}
             </MarkdownLink>
@@ -347,7 +337,7 @@ export default class Markdown extends PureComponent {
         const style = getStyleSheet(this.props.theme);
         const styles = [
             this.props.baseTextStyle,
-            style.editedIndicatorText
+            style.editedIndicatorText,
         ];
 
         return (
@@ -381,7 +371,7 @@ export default class Markdown extends PureComponent {
             }
         }
 
-        return <View>{this.renderer.render(ast)}</View>;
+        return this.renderer.render(ast);
     }
 }
 
@@ -390,23 +380,22 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     // so we calculate the resulting colour manually
     const editedOpacity = Platform.select({
         ios: 0.3,
-        android: 1.0
+        android: 1.0,
     });
     const editedColor = Platform.select({
         ios: theme.centerChannelColor,
-        android: blendColors(theme.centerChannelBg, theme.centerChannelColor, 0.3)
+        android: blendColors(theme.centerChannelBg, theme.centerChannelColor, 0.3),
     });
 
     return {
         block: {
             alignItems: 'flex-start',
             flexDirection: 'row',
-            flexWrap: 'wrap'
+            flexWrap: 'wrap',
         },
         editedIndicatorText: {
             color: editedColor,
-            fontSize: 14,
-            opacity: editedOpacity
-        }
+            opacity: editedOpacity,
+        },
     };
 });

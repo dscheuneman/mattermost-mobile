@@ -3,7 +3,7 @@
 
 import {getDataRetentionPolicy} from 'mattermost-redux/actions/general';
 import {GeneralTypes} from 'mattermost-redux/action_types';
-import {Client, Client4} from 'mattermost-redux/client';
+import {Client4} from 'mattermost-redux/client';
 
 import {ViewTypes} from 'app/constants';
 
@@ -11,7 +11,7 @@ export function handleLoginIdChanged(loginId) {
     return async (dispatch, getState) => {
         dispatch({
             type: ViewTypes.LOGIN_ID_CHANGED,
-            loginId
+            loginId,
         }, getState);
     };
 }
@@ -20,7 +20,7 @@ export function handlePasswordChanged(password) {
     return async (dispatch, getState) => {
         dispatch({
             type: ViewTypes.PASSWORD_CHANGED,
-            password
+            password,
         }, getState);
     };
 }
@@ -35,12 +35,9 @@ export function handleSuccessfulLogin() {
             type: GeneralTypes.RECEIVED_APP_CREDENTIALS,
             data: {
                 url,
-                token
-            }
+                token,
+            },
         }, getState);
-
-        Client.setToken(token);
-        Client.setUrl(url);
 
         if (config.DataRetentionEnableMessageDeletion && config.DataRetentionEnableMessageDeletion === 'true' &&
             license.IsLicensed === 'true' && license.DataRetention === 'true') {
@@ -76,5 +73,5 @@ export default {
     handleLoginIdChanged,
     handlePasswordChanged,
     handleSuccessfulLogin,
-    getSession
+    getSession,
 };

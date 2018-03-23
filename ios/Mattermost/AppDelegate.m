@@ -19,6 +19,7 @@
 #import "Orientation.h"
 #import "RCCManager.h"
 #import "RNNotifications.h"
+#import "SessionManager.h"
 
 @implementation AppDelegate
 
@@ -34,36 +35,6 @@
   [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error: nil];
 
   return YES;
-}
-
--(void)application:(UIApplication *)application handleEventsForBackgroundURLSession:(nonnull NSString *)identifier completionHandler:(nonnull void (^)(void))completionHandler {
-
-  NSUserDefaults *bucket = [[NSUserDefaults alloc] initWithSuiteName: @"group.com.mattermost"];
-  NSString *credentialsString = [bucket objectForKey:@"credentials"];
-  NSData *credentialsData = [credentialsString dataUsingEncoding:NSUTF8StringEncoding];
-  NSDictionary *credentials = [NSJSONSerialization JSONObjectWithData:credentialsData options:NSJSONReadingMutableContainers error:nil];
-  NSString *server = [credentials objectForKey:@"url"];
-  NSString *token = [credentials objectForKey:@"token"];
-  
-  NSDictionary *post = [NSDictionary dictionaryWithObjectsAndKeys:@"user_id", [bucket objectForKey:@"currentUserId"], @"message", @"Shit fuck", @"channel_id", @"zw43c5ttrjyu9dg7jnudwuz6bw"];
-  NSData *postData = [NSJSONSerialization dataWithJSONObject:post options:NSJSONWritingPrettyPrinted error:nil];
-  NSString* postAsString = [[NSString alloc] initWithData:postData encoding:NSUTF8StringEncoding];
-  
-  NSURL *createUrl = [NSURL URLWithString:[server stringByAppendingString:@"/api/v4/posts"]];
-  NSURLSessionConfiguration* config = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:@"backgroundSession-post"];
-  config.sharedContainerIdentifier = @"group.com.mattermost";
-  
-  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:createUrl cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:5.0];
-  [request setHTTPMethod:@"POST"];
-  [request setValue:[@"Bearer " stringByAppendingString:token] forHTTPHeaderField:@"Authorization"];
-  [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-  [request setValue:@"application/json; charset=utf-8" forHTTPHeaderField:@"Content-Type"];
-  [request setHTTPBody:[postAsString dataUsingEncoding:NSUTF8StringEncoding]];
-  NSURLSession *createSession = [NSURLSession sessionWithConfiguration:config];
-  NSURLSessionDataTask *createTask = [createSession dataTaskWithRequest:request];
-  [createTask resume];
-  
-  completionHandler();
 }
 
 // Required for orientation
@@ -106,6 +77,11 @@
 - (void)application:(UIApplication *)application handleActionWithIdentifier:(NSString *)identifier forRemoteNotification:(NSDictionary *)userInfo withResponseInfo:(NSDictionary *)responseInfo completionHandler:(void (^)())completionHandler
 {
   [RNNotifications handleActionWithIdentifier:identifier forRemoteNotification:userInfo withResponseInfo:responseInfo completionHandler:completionHandler];
+}
+
+-(void)application:(UIApplication *)application handleEventsForBackgroundURLSession:(nonnull NSString *)identifier completionHandler:(nonnull void (^)(void))completionHandler {
+  [SessionManager sharedSession].savedCompletionHandler = completionHandler;
+  [[SessionManager sharedSession] createSessionForRequestRequest:identifier];
 }
 
 @end

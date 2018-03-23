@@ -3,11 +3,7 @@
 
 import DeviceInfo from 'react-native-device-info';
 
-import {ChannelTypes, GeneralTypes, TeamTypes, UserTypes} from 'mattermost-redux/action_types';
-import {General} from 'mattermost-redux/constants';
-import {getTeammateNameDisplaySetting} from 'mattermost-redux/selectors/entities/preferences';
-import {getUserIdFromChannelName, getGroupDisplayNameFromUserIds} from 'mattermost-redux/utils/channel_utils';
-import {displayUsername} from 'mattermost-redux/utils/user_utils';
+import {UserTypes} from 'mattermost-redux/action_types';
 
 import {ViewTypes} from 'app/constants';
 import initialState from 'app/initial_state';
@@ -16,7 +12,7 @@ import Config from 'assets/config';
 
 import {
     captureException,
-    LOGGER_JAVASCRIPT_WARNING
+    LOGGER_JAVASCRIPT_WARNING,
 } from 'app/utils/sentry';
 
 export function messageRetention(store) {
@@ -70,7 +66,7 @@ function resetStateForNewVersion(action) {
         teams = {
             currentTeamId: payload.entities.teams.currentTeamId,
             teams: payload.entities.teams.teams,
-            myMembers: payload.entities.teams.myMembers
+            myMembers: payload.entities.teams.myMembers,
         };
     }
 
@@ -81,8 +77,8 @@ function resetStateForNewVersion(action) {
             users = {
                 currentUserId,
                 profiles: {
-                    [currentUserId]: payload.entities.users.profiles[currentUserId]
-                }
+                    [currentUserId]: payload.entities.users.profiles[currentUserId],
+                },
             };
         }
     }
@@ -95,7 +91,7 @@ function resetStateForNewVersion(action) {
     let search = initialState.entities.search;
     if (payload.entities.search && payload.entities.search.recent) {
         search = {
-            recent: payload.entities.search.recent
+            recent: payload.entities.search.recent,
         };
     }
 
@@ -137,37 +133,37 @@ function resetStateForNewVersion(action) {
     const nextState = {
         app: {
             build: DeviceInfo.getBuildNumber(),
-            version: DeviceInfo.getVersion()
+            version: DeviceInfo.getVersion(),
         },
         entities: {
             general,
             teams,
             users,
             preferences,
-            search
+            search,
         },
         views: {
             channel: {
-                drafts: channelDrafts
+                drafts: channelDrafts,
             },
             i18n,
             fetchCache,
             team: {
                 lastTeamId,
-                lastChannelForTeam
+                lastChannelForTeam,
             },
             thread: {
-                drafts: threadDrafts
+                drafts: threadDrafts,
             },
             selectServer,
-            recentEmojis
-        }
+            recentEmojis,
+        },
     };
 
     return {
         type: action.type,
         payload: nextState,
-        error: action.error
+        error: action.error,
     };
 }
 
@@ -197,12 +193,12 @@ function cleanupState(action, keepCurrent = false) {
             reactions: {},
             openGraph: payload.entities.posts.openGraph,
             selectedPostId: payload.entities.posts.selectedPostId,
-            currentFocusedPostId: payload.entities.posts.currentFocusedPostId
+            currentFocusedPostId: payload.entities.posts.currentFocusedPostId,
         },
         files: {
             files: {},
-            fileIdsByPostId: {}
-        }
+            fileIdsByPostId: {},
+        },
     };
 
     let retentionPeriod = 0;
@@ -281,6 +277,32 @@ function cleanupState(action, keepCurrent = false) {
         }
     });
 
+    // remove any pending posts that hasn't failed
+    if (payload.entities.posts && payload.entities.posts.pendingPostIds && payload.entities.posts.pendingPostIds.length) {
+        const nextPendingPostIds = [...payload.entities.posts.pendingPostIds];
+        payload.entities.posts.pendingPostIds.forEach((id) => {
+            const posts = nextEntitites.posts.posts;
+            const post = posts[id];
+
+            if (post) {
+                const postsInChannel = [...nextEntitites.posts.postsInChannel[post.channel_id]] || [];
+                if (!post.failed) {
+                    Reflect.deleteProperty(posts, id);
+                    const index = postsInChannel.indexOf(id);
+                    if (index !== -1) {
+                        postsInChannel.splice(index, 1);
+                        nextEntitites.posts.postsInChannel[post.channel_id] = postsInChannel;
+                    }
+                    removePendingPost(nextPendingPostIds, id);
+                }
+            } else {
+                removePendingPost(nextPendingPostIds, id);
+            }
+        });
+
+        nextEntitites.posts.pendingPostIds = nextPendingPostIds;
+    }
+
     const nextState = {
         app: resetPayload.app,
         entities: {
@@ -291,18 +313,19 @@ function cleanupState(action, keepCurrent = false) {
             preferences: resetPayload.entities.preferences,
             search: {
                 ...resetPayload.entities.search,
-                results: searchResults
+                results: searchResults,
             },
             teams: resetPayload.entities.teams,
-            users: payload.entities.users
+            users: payload.entities.users,
         },
         views: {
+            announcement: payload.views.announcement,
             ...resetPayload.views,
             channel: {
                 ...resetPayload.views.channel,
-                ...payload.views.channel
-            }
-        }
+                ...payload.views.channel,
+            },
+        },
     };
 
     nextState.errors = payload.errors;
@@ -310,98 +333,28 @@ function cleanupState(action, keepCurrent = false) {
     return {
         type: 'persist/REHYDRATE',
         payload: nextState,
-        error: action.error
+        error: action.error,
     };
 }
 
-export function shareExtensionData(store) {
+export function shareExtensionData() {
     return (next) => (action) => {
         // allow other middleware to do their things
         const nextAction = next(action);
 
         switch (action.type) {
-        case 'persist/REHYDRATE': {
-            const {entities} = action.payload;
-            if (entities) {
-                if (entities.general && entities.general.credentials && entities.general.credentials.token) {
-                    mattermostBucket.set('credentials', JSON.stringify(entities.general.credentials), Config.AppGroupId);
-                }
-
-                if (entities.teams) {
-                    const {currentTeamId, teams} = entities.teams;
-                    if (currentTeamId) {
-                        const team = teams[currentTeamId];
-                        const teamToSave = {
-                            id: currentTeamId,
-                            name: team.name,
-                            display_name: team.display_name
-                        };
-                        mattermostBucket.set('selectedTeam', JSON.stringify(teamToSave), Config.AppGroupId);
-                    }
-                }
-
-                if (entities.users) {
-                    const {currentUserId} = entities.users;
-                    if (currentUserId) {
-                        mattermostBucket.set('currentUserId', currentUserId, Config.AppGroupId);
-                    }
-                }
-            }
-            break;
-        }
-        case GeneralTypes.RECEIVED_APP_CREDENTIALS:
-            mattermostBucket.set('credentials', JSON.stringify(action.data), Config.AppGroupId);
-            break;
-        case ChannelTypes.SELECT_CHANNEL: {
-            const state = store.getState();
-            const {channels} = state.entities.channels;
-            const {currentUserId, profiles, profilesInChannel} = state.entities.users;
-            const channel = {...channels[action.data]};
-            if (channel.type === General.DM_CHANNEL) {
-                const teammateId = getUserIdFromChannelName(currentUserId, channel.name);
-                channel.display_name = displayUsername(profiles[teammateId], getTeammateNameDisplaySetting(state));
-            } else if (channel.type === General.GM_CHANNEL) {
-                channel.display_name = getGroupDisplayNameFromUserIds(
-                    profilesInChannel[channel.id],
-                    profiles,
-                    currentUserId,
-                    getTeammateNameDisplaySetting(state)
-                );
-            }
-
-            const channelToSave = {
-                id: channel.id,
-                name: channel.name,
-                display_name: channel.display_name,
-                type: channel.type
-            };
-            mattermostBucket.set('selectedChannel', JSON.stringify(channelToSave), Config.AppGroupId);
-            break;
-        }
-        case 'BATCH_SELECT_TEAM': {
-            const teamData = action.payload.find((data) => data.type === TeamTypes.SELECT_TEAM);
-            if (teamData && teamData.data) {
-                const team = store.getState().entities.teams.teams[teamData.data];
-                const teamToSave = {
-                    id: team.id,
-                    name: team.name,
-                    display_name: team.display_name
-                };
-                mattermostBucket.set('selectedTeam', JSON.stringify(teamToSave), Config.AppGroupId);
-            }
-            break;
-        }
-        case UserTypes.RECEIVED_ME:
-            mattermostBucket.set('currentUserId', action.data.id, Config.AppGroupId);
-            break;
         case UserTypes.LOGOUT_SUCCESS:
-            mattermostBucket.remove('credentials', Config.AppGroupId);
-            mattermostBucket.remove('selectedChannel', Config.AppGroupId);
-            mattermostBucket.remove('selectedTeam', Config.AppGroupId);
-            mattermostBucket.remove('currentUserId', Config.AppGroupId);
-            mattermostBucket.remove('emm', Config.AppGroupId);
+            mattermostBucket.removePreference('emm', Config.AppGroupId);
+            mattermostBucket.removeFile('entities', Config.AppGroupId);
             break;
         }
         return nextAction;
     };
+}
+
+function removePendingPost(pendingPostIds, id) {
+    const pendingIndex = pendingPostIds.indexOf(id);
+    if (pendingIndex !== -1) {
+        pendingPostIds.splice(pendingIndex, 1);
+    }
 }

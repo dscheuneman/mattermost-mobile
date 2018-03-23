@@ -26,7 +26,8 @@ function mapStateToProps(state) {
         postIds: getPostIdsInCurrentChannel(state),
         postVisibility: state.views.channel.postVisibility[channelId],
         lastViewedAt: getMyCurrentChannelMembership(state).last_viewed_at,
-        theme: getTheme(state)
+        loadMorePostsVisible: state.views.channel.loadMorePostsVisible,
+        theme: getTheme(state),
     };
 }
 
@@ -38,8 +39,8 @@ function mapDispatchToProps(dispatch) {
             increasePostVisibility,
             selectPost,
             recordLoadTime,
-            refreshChannelWithRetry
-        }, dispatch)
+            refreshChannelWithRetry,
+        }, dispatch),
     };
 }
 

@@ -10,7 +10,7 @@ import {
     NativeModules,
     NavigatorIOS,
     StyleSheet,
-    View
+    View,
 } from 'react-native';
 
 import {Preferences} from 'mattermost-redux/constants';
@@ -34,11 +34,11 @@ export default class SharedApp extends PureComponent {
         this.state = {
             backdropOpacity: new Animated.Value(0),
             containerOpacity: new Animated.Value(0),
-            isLandscape
+            isLandscape,
         };
 
-        mattermostBucket.get('credentials', Config.AppGroupId).then((value) => {
-            this.credentials = value;
+        mattermostBucket.readFromFile('entities', Config.AppGroupId).then((value) => {
+            this.entities = value;
             this.setState({init: true});
         });
     }
@@ -49,34 +49,19 @@ export default class SharedApp extends PureComponent {
                 this.state.backdropOpacity,
                 {
                     toValue: 0.5,
-                    duration: 100
+                    duration: 100,
                 }),
             Animated.timing(
                 this.state.containerOpacity,
                 {
                     toValue: 1,
-                    duration: 250
-                })
+                    duration: 250,
+                }),
         ]).start();
     }
 
     onClose = (data) => {
-        Animated.parallel([
-            Animated.timing(
-                this.state.backdropOpacity,
-                {
-                    toValue: 0,
-                    duration: 250
-                }),
-            Animated.timing(
-                this.state.containerOpacity,
-                {
-                    toValue: 0,
-                    duration: 250
-                })
-        ]).start(() => {
-            ShareExtension.close(data, Config.AppGroupId);
-        });
+        ShareExtension.close(data, Config.AppGroupId);
     };
 
     onLayout = (e) => {
@@ -85,6 +70,11 @@ export default class SharedApp extends PureComponent {
         if (this.state.isLandscape !== isLandscape) {
             this.setState({isLandscape});
         }
+    };
+
+    userIsLoggedIn = () => {
+        return Boolean(this.entities && this.entities.general && this.entities.general.credentials &&
+            this.entities.general.credentials.token && this.entities.general.credentials.url);
     };
 
     render() {
@@ -101,15 +91,16 @@ export default class SharedApp extends PureComponent {
             component: ExtensionPost,
             title: 'Mattermost',
             passProps: {
-                credentials: this.credentials,
+                authenticated: this.userIsLoggedIn(),
+                entities: this.entities,
                 onClose: this.onClose,
                 isLandscape,
-                theme
+                theme,
             },
             wrapperStyle: {
                 borderRadius: 10,
-                backgroundColor: theme.centerChannelBg
-            }
+                backgroundColor: theme.centerChannelBg,
+            },
         };
 
         return (
@@ -128,9 +119,9 @@ export default class SharedApp extends PureComponent {
                                 styles.container,
                                 {
                                     opacity: this.state.containerOpacity,
-                                    height: this.credentials ? 250 : 130,
-                                    top: isLandscape ? 20 : 65
-                                }
+                                    height: this.userIsLoggedIn() ? 250 : 130,
+                                    top: isLandscape ? 20 : 65,
+                                },
                             ]}
                         >
                             <NavigatorIOS
@@ -148,23 +139,23 @@ export default class SharedApp extends PureComponent {
 
 const styles = StyleSheet.create({
     flex: {
-        flex: 1
+        flex: 1,
     },
     backdrop: {
         position: 'absolute',
         flex: 1,
         backgroundColor: '#000',
         height: '100%',
-        width: '100%'
+        width: '100%',
     },
     wrapper: {
         flex: 1,
-        marginHorizontal: 20
+        marginHorizontal: 20,
     },
     container: {
         backgroundColor: 'white',
         borderRadius: 10,
         position: 'relative',
-        width: '100%'
-    }
+        width: '100%',
+    },
 });

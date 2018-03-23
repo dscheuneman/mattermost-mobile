@@ -4,9 +4,8 @@ import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {intlShape} from 'react-intl';
 import {
-    Dimensions,
     Platform,
-    View
+    View,
 } from 'react-native';
 
 import ErrorText from 'app/components/error_text';
@@ -20,26 +19,28 @@ import {RequestStatus} from 'mattermost-redux/constants';
 export default class EditPost extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
-            editPost: PropTypes.func.isRequired
+            editPost: PropTypes.func.isRequired,
         }),
         closeButton: PropTypes.object,
+        deviceHeight: PropTypes.number,
+        deviceWidth: PropTypes.number,
         editPostRequest: PropTypes.object.isRequired,
         navigator: PropTypes.object,
         post: PropTypes.object.isRequired,
-        theme: PropTypes.object.isRequired
+        theme: PropTypes.object.isRequired,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     leftButton = {
-        id: 'close-edit-post'
+        id: 'close-edit-post',
     };
 
     rightButton = {
         id: 'edit-post',
-        showAsAction: 'always'
+        showAsAction: 'always',
     };
 
     constructor(props, context) {
@@ -51,7 +52,7 @@ export default class EditPost extends PureComponent {
         props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
         props.navigator.setButtons({
             leftButtons: [{...this.leftButton, icon: props.closeButton}],
-            rightButtons: [this.rightButton]
+            rightButtons: [this.rightButton],
         });
     }
 
@@ -87,21 +88,21 @@ export default class EditPost extends PureComponent {
 
     close = () => {
         this.props.navigator.dismissModal({
-            animationType: 'slide-down'
+            animationType: 'slide-down',
         });
     };
 
     emitCanEditPost = (enabled) => {
         this.props.navigator.setButtons({
             leftButtons: [{...this.leftButton, icon: this.props.closeButton}],
-            rightButtons: [{...this.rightButton, disabled: !enabled}]
+            rightButtons: [{...this.rightButton, disabled: !enabled}],
         });
     };
 
     emitEditing = (loading) => {
         this.props.navigator.setButtons({
             leftButtons: [{...this.leftButton, icon: this.props.closeButton}],
-            rightButtons: [{...this.rightButton, disabled: loading}]
+            rightButtons: [{...this.rightButton, disabled: loading}],
         });
     };
 
@@ -142,9 +143,8 @@ export default class EditPost extends PureComponent {
     };
 
     render() {
-        const {theme} = this.props;
+        const {deviceHeight, deviceWidth, theme} = this.props;
         const {editing, message, error} = this.state;
-        const {height, width} = Dimensions.get('window');
 
         const style = getStyleSheet(theme);
 
@@ -160,7 +160,7 @@ export default class EditPost extends PureComponent {
         let displayError;
         if (error) {
             displayError = (
-                <View style={[style.errorContainer, {width}]}>
+                <View style={[style.errorContainer, {width: deviceWidth}]}>
                     <View style={style.errorWrapper}>
                         <ErrorText error={error}/>
                     </View>
@@ -168,12 +168,14 @@ export default class EditPost extends PureComponent {
             );
         }
 
+        const height = Platform.OS === 'android' ? (deviceHeight / 2) - 40 : (deviceHeight / 2);
+
         return (
             <View style={style.container}>
                 <StatusBar/>
                 <View style={style.scrollView}>
                     {displayError}
-                    <View style={[style.inputContainer, {height: Platform.OS === 'android' ? (height / 2) - 20 : (height / 2)}]}>
+                    <View style={[style.inputContainer, {height}]}>
                         <TextInputWithLocalizedPlaceholder
                             ref={this.messageRef}
                             value={message}
@@ -181,7 +183,8 @@ export default class EditPost extends PureComponent {
                             onChangeText={this.onPostChangeText}
                             multiline={true}
                             numberOfLines={10}
-                            style={[style.input, {height: height / 2}]}
+                            style={[style.input, {height}]}
+                            autoFocus={true}
                             autoCapitalize='none'
                             autoCorrect={false}
                             placeholder={{id: 'edit_post.editPost', defaultMessage: 'Edit the post...'}}
@@ -200,17 +203,17 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
+            backgroundColor: theme.centerChannelBg,
         },
         scrollView: {
             flex: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.03)
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.03),
         },
         errorContainer: {
-            paddingHorizontal: 10
+            paddingHorizontal: 10,
         },
         errorWrapper: {
-            alignItems: 'center'
+            alignItems: 'center',
         },
         inputContainer: {
             borderTopWidth: 1,
@@ -218,13 +221,13 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
             borderTopColor: changeOpacity(theme.centerChannelColor, 0.1),
             borderBottomColor: changeOpacity(theme.centerChannelColor, 0.1),
             backgroundColor: theme.centerChannelBg,
-            marginTop: 2
+            marginTop: 2,
         },
         input: {
             color: theme.centerChannelColor,
             fontSize: 14,
             padding: 15,
-            textAlignVertical: 'top'
-        }
+            textAlignVertical: 'top',
+        },
     };
 });

@@ -9,14 +9,14 @@ import {
     Text,
     TouchableWithoutFeedback,
     View,
-    ViewPropTypes
+    ViewPropTypes,
 } from 'react-native';
 
 export default class Badge extends PureComponent {
     static defaultProps = {
         extraPaddingHorizontal: 10,
         minHeight: 0,
-        minWidth: 0
+        minWidth: 0,
     };
 
     static propTypes = {
@@ -26,7 +26,7 @@ export default class Badge extends PureComponent {
         countStyle: Text.propTypes.style,
         minHeight: PropTypes.number,
         minWidth: PropTypes.number,
-        onPress: PropTypes.func
+        onPress: PropTypes.func,
     };
 
     constructor(props) {
@@ -42,7 +42,7 @@ export default class Badge extends PureComponent {
             onMoveShouldSetPanResponder: () => true,
             onStartShouldSetResponderCapture: () => true,
             onMoveShouldSetResponderCapture: () => true,
-            onResponderMove: () => false
+            onResponderMove: () => false,
         });
     }
 
@@ -74,8 +74,6 @@ export default class Badge extends PureComponent {
 
     onLayout = (e) => {
         if (!this.layoutReady) {
-            const height = Math.max(e.nativeEvent.layout.height, this.props.minHeight);
-            const borderRadius = height / 2;
             let width;
 
             if (e.nativeEvent.layout.width <= e.nativeEvent.layout.height) {
@@ -83,14 +81,14 @@ export default class Badge extends PureComponent {
             } else {
                 width = e.nativeEvent.layout.width + this.props.extraPaddingHorizontal;
             }
-            width = Math.max(width, this.props.minWidth);
+            width = Math.max(width + 10, this.props.minWidth);
+            const borderRadius = width / 2;
             this.setNativeProps({
                 style: {
                     width,
-                    height,
                     borderRadius,
-                    opacity: 1
-                }
+                    opacity: 1,
+                },
             });
             this.layoutReady = true;
         }
@@ -141,22 +139,23 @@ export default class Badge extends PureComponent {
 
 const styles = StyleSheet.create({
     badge: {
-        top: 2,
+        backgroundColor: '#444',
+        borderRadius: 20,
+        height: 20,
         padding: 12,
         paddingTop: 3,
         paddingBottom: 3,
-        backgroundColor: '#444',
-        borderRadius: 20,
         position: 'absolute',
-        right: 30
+        right: 30,
+        top: 2,
     },
     wrapper: {
         alignItems: 'center',
         flex: 1,
-        justifyContent: 'center'
+        justifyContent: 'center',
     },
     text: {
         fontSize: 14,
-        color: 'white'
-    }
+        color: 'white',
+    },
 });

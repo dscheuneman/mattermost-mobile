@@ -5,7 +5,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import {
     View,
-    ViewPropTypes
+    ViewPropTypes,
 } from 'react-native';
 
 import FormattedText from 'app/components/formatted_text';
@@ -14,15 +14,29 @@ import {makeStyleSheetFromTheme} from 'app/utils/theme';
 function NewMessagesDivider(props) {
     const style = getStyleFromTheme(props.theme);
 
+    let text = (
+        <FormattedText
+            id='posts_view.newMsg'
+            defaultMessage='New Messages'
+            style={style.text}
+        />
+    );
+
+    if (props.moreMessages) {
+        text = (
+            <FormattedText
+                id='mobile.posts_view.moreMsg'
+                defaultMessage='More New Messages Above'
+                style={style.text}
+            />
+        );
+    }
+
     return (
         <View style={[style.container, props.style]}>
             <View style={style.line}/>
             <View style={style.textContainer}>
-                <FormattedText
-                    id='posts_view.newMsg'
-                    defaultMessage='New Messages'
-                    style={style.text}
-                />
+                {text}
             </View>
             <View style={style.line}/>
         </View>
@@ -30,8 +44,9 @@ function NewMessagesDivider(props) {
 }
 
 NewMessagesDivider.propTypes = {
+    moreMessages: PropTypes.bool,
     style: ViewPropTypes.style,
-    theme: PropTypes.object
+    theme: PropTypes.object,
 };
 
 const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
@@ -39,20 +54,20 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
         container: {
             alignItems: 'center',
             flexDirection: 'row',
-            height: 28
+            height: 28,
         },
         textContainer: {
-            marginHorizontal: 15
+            marginHorizontal: 15,
         },
         line: {
             flex: 1,
             height: 1,
-            backgroundColor: theme.newMessageSeparator
+            backgroundColor: theme.newMessageSeparator,
         },
         text: {
             fontSize: 14,
-            color: theme.newMessageSeparator
-        }
+            color: theme.newMessageSeparator,
+        },
     };
 });
 

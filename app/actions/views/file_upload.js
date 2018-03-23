@@ -1,12 +1,14 @@
 // Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
-import FormData from 'form-data';
 import {Platform} from 'react-native';
 import {uploadFile} from 'mattermost-redux/actions/files';
-import {parseClientIdsFromFormData} from 'mattermost-redux/utils/file_utils';
 
-import {buildFileUploadData, generateId} from 'app/utils/file';
+import {
+    buildFileUploadData,
+    encodeHeaderURIStringToUTF8,
+    generateId,
+} from 'app/utils/file';
 import {ViewTypes} from 'app/constants';
 
 export function handleUploadFiles(files, rootId) {
@@ -26,9 +28,10 @@ export function handleUploadFiles(files, rootId) {
                 localPath: fileData.uri,
                 name: fileData.name,
                 type: fileData.mimeType,
-                extension: fileData.extension
+                extension: fileData.extension,
             });
 
+            fileData.name = encodeHeaderURIStringToUTF8(fileData.name);
             formData.append('files', fileData);
             formData.append('channel_id', channelId);
             formData.append('client_ids', clientId);
@@ -43,10 +46,11 @@ export function handleUploadFiles(files, rootId) {
             type: ViewTypes.SET_TEMP_UPLOAD_FILES_FOR_POST_DRAFT,
             clientIds,
             channelId,
-            rootId
+            rootId,
         });
 
-        await uploadFile(channelId, rootId, parseClientIdsFromFormData(formData), formData, formBoundary)(dispatch, getState);
+        const clientIdsArray = clientIds.map((c) => c.clientId);
+        await uploadFile(channelId, rootId, clientIdsArray, formData, formBoundary)(dispatch, getState);
     };
 }
 
@@ -56,13 +60,11 @@ export function retryFileUpload(file, rootId) {
 
         const channelId = state.entities.channels.currentChannelId;
         const formData = new FormData();
+        const fileData = buildFileUploadData(file);
 
-        const fileData = {
-            uri: file.localPath,
-            name: file.name,
-            type: file.type
-        };
+        fileData.uri = file.localPath;
 
+        fileData.name = encodeHeaderURIStringToUTF8(fileData.name);
         formData.append('files', fileData);
         formData.append('channel_id', channelId);
         formData.append('client_ids', file.clientId);
@@ -76,7 +78,7 @@ export function retryFileUpload(file, rootId) {
             type: ViewTypes.RETRY_UPLOAD_FILE_FOR_POST,
             clientId: file.clientId,
             channelId,
-            rootId
+            rootId,
         });
 
         await uploadFile(channelId, rootId, [file.clientId], formData, formBoundary)(dispatch, getState);
@@ -87,7 +89,7 @@ export function handleClearFiles(channelId, rootId) {
     return {
         type: ViewTypes.CLEAR_FILES_FOR_POST_DRAFT,
         channelId,
-        rootId
+        rootId,
     };
 }
 
@@ -95,7 +97,7 @@ export function handleClearFailedFiles(channelId, rootId) {
     return {
         type: ViewTypes.CLEAR_FAILED_FILES_FOR_POST_DRAFT,
         channelId,
-        rootId
+        rootId,
     };
 }
 
@@ -104,7 +106,7 @@ export function handleRemoveFile(clientId, channelId, rootId) {
         type: ViewTypes.REMOVE_FILE_FROM_POST_DRAFT,
         clientId,
         channelId,
-        rootId
+        rootId,
     };
 }
 
@@ -112,6 +114,6 @@ export function handleRemoveLastFile(channelId, rootId) {
     return {
         type: ViewTypes.REMOVE_LAST_FILE_FROM_POST_DRAFT,
         channelId,
-        rootId
+        rootId,
     };
 }

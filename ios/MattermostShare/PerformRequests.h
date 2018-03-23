@@ -1,12 +1,5 @@
-//
-//  PerformRequests.h
-//  MattermostShare
-//
-//  Created by Elias Nahum on 12/18/17.
-//  Copyright © 2017 Facebook. All rights reserved.
-//
-
 #import <Foundation/Foundation.h>
+#import "MattermostBucket.h"
 
 @interface PerformRequests : NSObject<NSURLSessionDelegate, NSURLSessionTaskDelegate>
 @property (nonatomic, strong) NSString *appGroupId;
@@ -17,12 +10,14 @@
 
 @property (nonatomic, strong) NSString *serverUrl;
 @property (nonatomic, strong) NSString *token;
-@property NSUserDefaults *bucket;
+@property (nonatomic, strong) NSExtensionContext *extensionContext;
+@property MattermostBucket *bucket;
 
 - (id) initWithPost:(NSDictionary *) post
           withFiles:(NSArray *) files
        forRequestId:(NSString *)requestId
-       inAppGroupId:(NSString *) appGroupId;
+       inAppGroupId:(NSString *) appGroupId
+       inContext:(NSExtensionContext *) extensionContext;
 
 -(void)createPost;
 @end

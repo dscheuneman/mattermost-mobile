@@ -78,7 +78,7 @@ public class MainApplication extends NavigationApplication implements INotificat
 
   @Override
   public String getJSMainModuleName() {
-    return "index.android";
+    return "index";
   }
 
   @Override
@@ -91,6 +91,13 @@ public class MainApplication extends NavigationApplication implements INotificat
     setActivityCallbacks(notificationsLifecycleFacade);
 
     SoLoader.init(this, /* native exopackage */ false);
+  }
+
+  @Override
+  public boolean clearHostOnActivityDestroy() {
+    // This solves the issue where the splash screen does not go away
+    // after the app is killed by the OS cause of memory or a long time in the background
+    return false;
   }
 
   @Override

@@ -5,42 +5,39 @@ import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
     ActivityIndicator,
-    SectionList,
     Text,
-    View
+    View,
 } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import {intlShape} from 'react-intl';
+import TableView from 'react-native-tableview';
+import Icon from 'react-native-vector-icons/FontAwesome';
 
-import {Client4} from 'mattermost-redux/client';
-import {General, Preferences} from 'mattermost-redux/constants';
-import {getUserIdFromChannelName} from 'mattermost-redux/utils/channel_utils';
-import {displayUsername} from 'mattermost-redux/utils/user_utils';
+import {General} from 'mattermost-redux/constants';
+import {getChannelsInTeam, getDirectChannels} from 'mattermost-redux/selectors/entities/channels';
 
 import SearchBar from 'app/components/search_bar';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
-
-import ExtensionChannelItem from 'share_extension/common/extension_channel_item';
 
 import ExtensionNavBar from './extension_nav_bar';
 
 export default class ExtensionChannels extends PureComponent {
     static propTypes = {
+        entities: PropTypes.object,
         currentChannelId: PropTypes.string.isRequired,
-        currentUserId: PropTypes.string.isRequired,
         navigator: PropTypes.object.isRequired,
         onSelectChannel: PropTypes.func.isRequired,
         teamId: PropTypes.string.isRequired,
         theme: PropTypes.object.isRequired,
-        title: PropTypes.string.isRequired
+        title: PropTypes.string.isRequired,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     state = {
-        sections: null
+        sections: null,
     };
 
     componentWillMount() {
@@ -75,7 +72,7 @@ export default class ExtensionChannels extends PureComponent {
             sections.push({
                 id: 'sidebar.channels',
                 defaultMessage: 'PUBLIC CHANNELS',
-                data: publicChannels.sort(this.sortDisplayName)
+                data: publicChannels.sort(this.sortDisplayName),
             });
         }
 
@@ -83,7 +80,7 @@ export default class ExtensionChannels extends PureComponent {
             sections.push({
                 id: 'sidebar.pg',
                 defaultMessage: 'PRIVATE CHANNELS',
-                data: privateChannels.sort(this.sortDisplayName)
+                data: privateChannels.sort(this.sortDisplayName),
             });
         }
 
@@ -91,69 +88,46 @@ export default class ExtensionChannels extends PureComponent {
             sections.push({
                 id: 'sidebar.direct',
                 defaultMessage: 'DIRECT MESSAGES',
-                data: directChannels.sort(this.sortDisplayName)
+                data: directChannels.sort(this.sortDisplayName),
             });
         }
 
         this.setState({sections});
     };
 
-    getGroupDisplayNameFromUserIds = (userIds, profiles) => {
-        const names = [];
-        userIds.forEach((id) => {
-            const profile = profiles.find((p) => p.id === id);
-            names.push(displayUsername(profile, Preferences.DISPLAY_PREFER_FULL_NAME));
-        });
-
-        return names.sort(this.sort).join(', ');
+    cancelSearch = () => {
+        this.setState({term: ''});
+        this.buildSections();
     };
 
     goBack = () => {
         this.props.navigator.pop();
     };
 
-    keyExtractor = (item) => item.id;
-
     loadChannels = async () => {
         try {
-            const {currentUserId, teamId} = this.props;
-            const channelsMap = {};
+            const {entities, teamId} = this.props;
 
-            const myChannels = await Client4.getMyChannels(teamId);
-            const myPreferences = await Client4.getMyPreferences();
+            // get the channels for the specified team
+            const channelsInTeam = getChannelsInTeam({entities});
+            const channelIds = channelsInTeam[teamId] || [];
+            const direct = getDirectChannels({entities});
+            const channels = channelIds.map((id) => this.props.entities.channels.channels[id]).concat(direct);
 
-            const usersInDms = myPreferences.filter((pref) => pref.category === Preferences.CATEGORY_DIRECT_CHANNEL_SHOW).map((pref) => pref.name);
-            const dms = myChannels.filter((channel) => {
-                const teammateId = getUserIdFromChannelName(currentUserId, channel.name);
-                return (channel.type === General.DM_CHANNEL && usersInDms.includes(teammateId)) || channel.type === General.GM_CHANNEL;
-            });
+            const icons = await Promise.all([
+                Icon.getImageSource('globe', 16, this.props.theme.centerChannelColor),
+                Icon.getImageSource('lock', 16, this.props.theme.centerChannelColor),
+                Icon.getImageSource('user', 16, this.props.theme.centerChannelColor),
+                Icon.getImageSource('users', 16, this.props.theme.centerChannelColor),
+            ]);
 
-            const dmProfiles = await Client4.getProfilesByIds(usersInDms);
-
-            for (let i = 0; i < dms.length; i++) {
-                const channel = dms[i];
-                if (channel.type === General.DM_CHANNEL) {
-                    const teammateId = getUserIdFromChannelName(currentUserId, channel.name);
-                    const profile = dmProfiles.find((p) => p.id === teammateId);
-                    channelsMap[channel.id] = displayUsername(profile, Preferences.DISPLAY_PREFER_FULL_NAME);
-                } else if (channel.type === General.GM_CHANNEL) {
-                    const members = await Client4.getChannelMembers(channel.id, 0, General.MAX_USERS_IN_GM);
-                    const userIds = members.filter((m) => m.user_id !== currentUserId).map((m) => m.user_id);
-                    const gmProfiles = await Client4.getProfilesByIds(userIds);
-                    channelsMap[channel.id] = this.getGroupDisplayNameFromUserIds(userIds, gmProfiles);
-                }
-            }
-
-            const channels = myChannels.map((channel) => {
-                return {
-                    id: channel.id,
-                    display_name: channelsMap[channel.id] || channel.display_name,
-                    type: channel.type
-                };
-            });
+            this.publicChannelIcon = icons[0];
+            this.privateChannelIcon = icons[1];
+            this.dmChannelIcon = icons[2];
+            this.gmChannelIcon = icons[3];
 
             this.setState({
-                channels
+                channels,
             }, () => {
                 this.buildSections();
             });
@@ -174,12 +148,20 @@ export default class ExtensionChannels extends PureComponent {
         });
     };
 
-    handleSelectChannel = (channel) => {
-        this.props.onSelectChannel(channel);
-        this.goBack();
+    handleSelectChannel = (selected) => {
+        const {sections} = this.state;
+        const section = sections.find((s) => s.id === selected.detail);
+        if (section) {
+            const channel = section.data.find((c) => c.id === selected.value);
+            if (channel) {
+                this.props.onSelectChannel(channel);
+                this.goBack();
+            }
+        }
     };
 
     renderBody = (styles) => {
+        const {theme} = this.props;
         const {error, sections} = this.state;
 
         if (error) {
@@ -201,45 +183,22 @@ export default class ExtensionChannels extends PureComponent {
         }
 
         return (
-            <SectionList
-                sections={sections}
-                ListHeaderComponent={this.renderSearchBar(styles)}
-                ItemSeparatorComponent={this.renderItemSeparator}
-                renderItem={this.renderItem}
-                renderSectionHeader={this.renderSectionHeader}
-                keyExtractor={this.keyExtractor}
-                keyboardShouldPersistTaps='always'
-                keyboardDismissMode='on-drag'
-                initialNumToRender={10}
-                maxToRenderPerBatch={10}
-                stickySectionHeadersEnabled={true}
-                scrollEventThrottle={100}
-                windowSize={5}
-            />
-        );
-    };
-
-    renderItem = ({item}) => {
-        const {currentChannelId, theme} = this.props;
-
-        return (
-            <ExtensionChannelItem
-                channel={item}
-                currentChannelId={currentChannelId}
-                onSelectChannel={this.handleSelectChannel}
-                theme={theme}
-            />
-        );
-    };
-
-    renderItemSeparator = () => {
-        const {theme} = this.props;
-        const styles = getStyleSheet(theme);
-
-        return (
-            <View style={styles.separatorContainer}>
-                <View style={styles.separator}/>
-            </View>
+            <TableView
+                tableViewStyle={TableView.Consts.Style.Plain}
+                tableViewCellStyle={TableView.Consts.CellStyle.Default}
+                separatorColor={changeOpacity(theme.centerChannelColor, 0.5)}
+                tintColor={theme.linkColor}
+                detailFontSize={16}
+                detailTextColor={theme.centerChannelColor}
+                headerFontSize={15}
+                headerTextColor={changeOpacity(theme.centerChannelColor, 0.6)}
+                style={styles.flex}
+            >
+                <TableView.Header>
+                    <TableView.Cell>{this.renderSearchBar(styles)}</TableView.Cell>
+                </TableView.Header>
+                {this.renderSections()}
+            </TableView>
         );
     };
 
@@ -261,35 +220,60 @@ export default class ExtensionChannels extends PureComponent {
                     tintColorDelete={changeOpacity(theme.centerChannelColor, 0.3)}
                     titleCancelColor={theme.linkColor}
                     onChangeText={this.handleSearch}
+                    onCancelButtonPress={this.cancelSearch}
                     value={this.state.term}
                 />
             </View>
         );
     };
 
-    renderSectionHeader = ({section}) => {
-        const {intl} = this.context;
-        const {theme} = this.props;
-        const styles = getStyleSheet(theme);
-        const {
-            defaultMessage,
-            id
-        } = section;
+    renderSections = () => {
+        const {formatMessage} = this.context.intl;
+        const {currentChannelId} = this.props;
+        const {sections} = this.state;
 
-        return (
-            <View style={[styles.titleContainer, {backgroundColor: theme.centerChannelBg}]}>
-                <View style={{backgroundColor: changeOpacity(theme.centerChannelColor, 0.1), justifyContent: 'center'}}>
-                    <Text style={styles.title}>
-                        {intl.formatMessage({id, defaultMessage}).toUpperCase()}
-                    </Text>
-                </View>
-            </View>
-        );
-    };
+        return sections.map((s) => {
+            const items = s.data.map((c) => {
+                let icon;
+                switch (c.type) {
+                case General.OPEN_CHANNEL:
+                    icon = this.publicChannelIcon.uri;
+                    break;
+                case General.PRIVATE_CHANNEL:
+                    icon = this.privateChannelIcon.uri;
+                    break;
+                case General.DM_CHANNEL:
+                    icon = this.dmChannelIcon.uri;
+                    break;
+                case General.GM_CHANNEL:
+                    icon = this.gmChannelIcon.uri;
+                    break;
+                }
 
-    sort = (a, b) => {
-        const locale = DeviceInfo.getDeviceLocale().split('-')[0];
-        return a.localeCompare(b, locale, {numeric: true});
+                return (
+                    <TableView.Item
+                        key={c.id}
+                        value={c.id}
+                        detail={s.id}
+                        selected={c.id === currentChannelId}
+                        onPress={this.handleSelectChannel}
+                        image={icon}
+                    >
+                        {c.display_name}
+                    </TableView.Item>
+                );
+            });
+
+            return (
+                <TableView.Section
+                    key={s.id}
+                    label={formatMessage({id: s.id, defaultMessage: s.defaultMessage})}
+                    headerHeight={30}
+                >
+                    {items}
+                </TableView.Section>
+            );
+        });
     };
 
     sortDisplayName = (a, b) => {
@@ -318,47 +302,48 @@ export default class ExtensionChannels extends PureComponent {
 const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         flex: {
-            flex: 1
+            flex: 1,
         },
         separatorContainer: {
-            paddingLeft: 35
+            paddingLeft: 35,
         },
         separator: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
-            height: 1
+            height: 1,
         },
         loadingContainer: {
             alignItems: 'center',
             flex: 1,
-            justifyContent: 'center'
+            justifyContent: 'center',
         },
         searchContainer: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
-            paddingBottom: 2
+            paddingBottom: 2,
+            paddingHorizontal: 5,
         },
         searchBarInput: {
             backgroundColor: '#fff',
             color: theme.centerChannelColor,
-            fontSize: 15
+            fontSize: 15,
         },
         titleContainer: {
-            height: 30
+            height: 30,
         },
         title: {
             color: changeOpacity(theme.centerChannelColor, 0.6),
             fontSize: 15,
             lineHeight: 30,
-            paddingHorizontal: 15
+            paddingHorizontal: 15,
         },
         errorContainer: {
             alignItems: 'center',
             flex: 1,
             justifyContent: 'center',
-            paddingHorizontal: 15
+            paddingHorizontal: 15,
         },
         error: {
             color: theme.errorTextColor,
-            fontSize: 14
-        }
+            fontSize: 14,
+        },
     };
 });

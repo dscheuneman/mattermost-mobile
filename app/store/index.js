@@ -2,7 +2,7 @@
 // See License.txt for license information.
 
 import {batchActions} from 'redux-batched-actions';
-import {AsyncStorage} from 'react-native';
+import {AsyncStorage, Platform} from 'react-native';
 import {createBlacklistFilter} from 'redux-persist-transform-filter';
 import {createTransform, persistStore} from 'redux-persist';
 
@@ -13,9 +13,12 @@ import EventEmitter from 'mattermost-redux/utils/event_emitter';
 
 import {NavigationTypes, ViewTypes} from 'app/constants';
 import appReducer from 'app/reducers';
+import {throttle} from 'app/utils/general';
 import networkConnectionListener from 'app/utils/network';
 import {createSentryMiddleware} from 'app/utils/sentry/middleware';
-import {promiseTimeout} from 'app/utils/promise_timeout';
+
+import mattermostBucket from 'app/mattermost_bucket';
+import Config from 'assets/config';
 
 import {messageRetention, shareExtensionData} from './middleware';
 import {transformSet} from './utils';
@@ -28,22 +31,22 @@ const usersSetTransform = [
     'profilesInChannel',
     'profilesNotInChannel',
     'profilesInTeam',
-    'profilesNotInTeam'
+    'profilesNotInTeam',
 ];
 
 const channelSetTransform = [
-    'channelsInTeam'
+    'channelsInTeam',
 ];
 
 const setTransforms = [
     ...usersSetTransform,
-    ...channelSetTransform
+    ...channelSetTransform,
 ];
 
 export default function configureAppStore(initialState) {
     const viewsBlackListFilter = createBlacklistFilter(
         'views',
-        ['extension', 'login', 'root']
+        ['announcement', 'extension', 'login', 'root']
     );
 
     const typingBlackListFilter = createBlacklistFilter(
@@ -51,7 +54,7 @@ export default function configureAppStore(initialState) {
         ['typing']
     );
 
-    const channelViewBlackList = {loading: true, refreshing: true, loadingPosts: true, postVisibility: true, retryFailed: true};
+    const channelViewBlackList = {loading: true, refreshing: true, loadingPosts: true, postVisibility: true, retryFailed: true, loadMorePostsVisible: true};
     const channelViewBlackListFilter = createTransform(
         (inboundState) => {
             const channel = {};
@@ -64,11 +67,31 @@ export default function configureAppStore(initialState) {
 
             return {
                 ...inboundState,
-                channel
+                channel,
             };
         },
         null,
-        {whitelist: ['views']} // Only run this filter the views state (or any other entry that ends up being named views)
+        {whitelist: ['views']} // Only run this filter on the views state (or any other entry that ends up being named views)
+    );
+
+    const emojiBlackList = {nonExistentEmoji: true};
+    const emojiBlackListFilter = createTransform(
+        (inboundState) => {
+            const emojis = {};
+
+            for (const emojiKey of Object.keys(inboundState.emojis)) {
+                if (!emojiBlackList[emojiKey]) {
+                    emojis[emojiKey] = inboundState.emojis[emojiKey];
+                }
+            }
+
+            return {
+                ...inboundState,
+                emojis,
+            };
+        },
+        null,
+        {whitelist: ['entities']} // Only run this filter on the entities state (or any other entry that ends up being named entities)
     );
 
     const setTransformer = createTransform(
@@ -110,13 +133,6 @@ export default function configureAppStore(initialState) {
                 throw new Error('Offline Action: commit action must be present.');
             }
 
-            if (action.meta.offline.canTimeout) {
-                const defaultTimeout = 10000;
-                const timeout = action.meta.offline.timeout || defaultTimeout;
-
-                return promiseTimeout(effect(), timeout);
-            }
-
             return effect();
         },
         detectNetwork: (callback) => networkConnectionListener(callback),
@@ -124,11 +140,21 @@ export default function configureAppStore(initialState) {
             const persistor = persistStore(store, {storage: AsyncStorage, ...options}, () => {
                 store.dispatch({
                     type: General.STORE_REHYDRATION_COMPLETE,
-                    complete: true
+                    complete: true,
                 });
             });
 
             let purging = false;
+
+            // for iOS write the entities to a shared file
+            if (Platform.OS === 'ios') {
+                store.subscribe(throttle(() => {
+                    const state = store.getState();
+                    if (state.entities) {
+                        mattermostBucket.writeToFile('entities', JSON.stringify(state.entities), Config.AppGroupId);
+                    }
+                }, 1000));
+            }
 
             // check to see if the logout request was successful
             store.subscribe(async () => {
@@ -141,16 +167,16 @@ export default function configureAppStore(initialState) {
                     store.dispatch(batchActions([
                         {
                             type: General.OFFLINE_STORE_RESET,
-                            data: initialState
+                            data: initialState,
                         },
                         {
                             type: ViewTypes.SERVER_URL_CHANGED,
-                            serverUrl: state.entities.general.credentials.url || state.views.selectServer.serverUrl
+                            serverUrl: state.entities.general.credentials.url || state.views.selectServer.serverUrl,
                         },
                         {
                             type: GeneralTypes.RECEIVED_APP_DEVICE_TOKEN,
-                            data: state.entities.general.deviceToken
-                        }
+                            data: state.entities.general.deviceToken,
+                        },
                     ]));
 
                     setTimeout(() => {
@@ -164,27 +190,27 @@ export default function configureAppStore(initialState) {
                     store.dispatch(batchActions([
                         {
                             type: General.OFFLINE_STORE_RESET,
-                            data: initialState
+                            data: initialState,
                         },
                         {
                             type: ErrorTypes.RESTORE_ERRORS,
-                            data: [...state.errors]
+                            data: [...state.errors],
                         },
                         {
                             type: GeneralTypes.RECEIVED_APP_DEVICE_TOKEN,
-                            data: state.entities.general.deviceToken
+                            data: state.entities.general.deviceToken,
                         },
                         {
                             type: GeneralTypes.RECEIVED_APP_CREDENTIALS,
                             data: {
                                 url: state.entities.general.credentials.url,
-                                token: state.entities.general.credentials.token
-                            }
+                                token: state.entities.general.credentials.token,
+                            },
                         },
                         {
                             type: ViewTypes.SERVER_URL_CHANGED,
-                            serverUrl: state.entities.general.credentials.url || state.views.selectServer.serverUrl
-                        }
+                            serverUrl: state.entities.general.credentials.url || state.views.selectServer.serverUrl,
+                        },
                     ], 'BATCH_FOR_RESTART'));
 
                     setTimeout(() => {
@@ -198,7 +224,7 @@ export default function configureAppStore(initialState) {
         },
         persistOptions: {
             autoRehydrate: {
-                log: false
+                log: false,
             },
             blacklist: ['device', 'navigation', 'offline', 'requests'],
             debounce: 500,
@@ -206,13 +232,14 @@ export default function configureAppStore(initialState) {
                 setTransformer,
                 viewsBlackListFilter,
                 typingBlackListFilter,
-                channelViewBlackListFilter
-            ]
-        }
+                channelViewBlackListFilter,
+                emojiBlackListFilter,
+            ],
+        },
     };
 
     const additionalMiddleware = [createSentryMiddleware(), messageRetention, shareExtensionData];
     return configureStore(initialState, appReducer, offlineOptions, getAppReducer, {
-        additionalMiddleware
+        additionalMiddleware,
     });
 }

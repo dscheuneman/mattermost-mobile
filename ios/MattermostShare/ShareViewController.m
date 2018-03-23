@@ -1,8 +1,8 @@
 #import "ShareViewController.h"
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTRootView.h>
-#import "MattermostBucket.h"
 #import "PerformRequests.h"
+#import "SessionManager.h"
 
 NSExtensionContext* extensionContext;
 
@@ -50,17 +50,29 @@ RCT_REMAP_METHOD(getOrientation,
 
 RCT_EXPORT_METHOD(close:(NSDictionary *)data appGroupId:(NSString *)appGroupId) {
   if (data != nil) {
-    NSDictionary *post = [data objectForKey:@"post"];
-    NSArray *files = [data objectForKey:@"files"];
     NSString *requestId = [data objectForKey:@"requestId"];
-    NSLog(@"Call createPost");
-    PerformRequests *request = [[PerformRequests alloc] initWithPost:post withFiles:files forRequestId:requestId inAppGroupId:appGroupId];
-    [request createPost];
-  }
-  
-  [extensionContext completeRequestReturningItems:nil
+    NSString *useBackgroundUpload = [data objectForKey:@"useBackgroundUpload"];
+    BOOL isBackgroundUpload = useBackgroundUpload ? [useBackgroundUpload boolValue] : NO;
+
+    if (isBackgroundUpload) {
+      NSString *requestWithGroup = [NSString stringWithFormat:@"%@|%@", requestId, appGroupId];
+      [[SessionManager sharedSession] setDataForRequest:data forRequestWithGroup:requestWithGroup];
+      [[SessionManager sharedSession] createPostForRequest:requestWithGroup];
+
+      [extensionContext completeRequestReturningItems:nil
+                                    completionHandler:nil];
+      NSLog(@"Extension closed");
+    } else {
+      NSDictionary *post = [data objectForKey:@"post"];
+      NSArray *files = [data objectForKey:@"files"];
+      PerformRequests *request = [[PerformRequests alloc] initWithPost:post withFiles:files forRequestId:requestId inAppGroupId:appGroupId inContext:extensionContext];
+      [request createPost];
+    }
+  } else {
+    [extensionContext completeRequestReturningItems:nil
                                 completionHandler:nil];
-  NSLog(@"Extension closed");
+    NSLog(@"Extension closed");
+  }
 }
 
 RCT_REMAP_METHOD(data,
@@ -153,7 +165,7 @@ typedef void (^ProviderCallback)(NSString *content, NSString *contentType, BOOL 
         } else if ([item isKindOfClass: UIImage.class]) {
           UIImage *image = (UIImage *)item;
           NSString *fileName = [NSString stringWithFormat:@"%@.jpg", [[NSUUID UUID] UUIDString]];
-          NSURL *tempContainerURL = [ShareViewController tempContainerURL:appGroupId];
+          NSURL *tempContainerURL = [[SessionManager sharedSession] tempContainerURL:appGroupId];
           if (tempContainerURL == nil){
             return callback(nil, nil, NO, nil);
           }
@@ -169,7 +181,7 @@ typedef void (^ProviderCallback)(NSString *content, NSString *contentType, BOOL 
           NSString *fileName = [NSString stringWithFormat:@"%@.jpg", [[NSUUID UUID] UUIDString]];
           NSData *data = (NSData *)item;
           UIImage *image = [UIImage imageWithData:data];
-          NSURL *tempContainerURL = [ShareViewController tempContainerURL:appGroupId];
+          NSURL *tempContainerURL = [[SessionManager sharedSession] tempContainerURL:appGroupId];
           if (tempContainerURL == nil){
             return callback(nil, nil, NO, nil);
           }
@@ -255,20 +267,5 @@ typedef void (^ProviderCallback)(NSString *content, NSString *contentType, BOOL 
   }
   
   callback(nil, nil, NO, nil);
-}
-
-+ (NSURL*) tempContainerURL: (NSString*)appGroupId {
-  NSFileManager *manager = [NSFileManager defaultManager];
-  NSURL *containerURL = [manager containerURLForSecurityApplicationGroupIdentifier: appGroupId];
-  NSURL *tempDirectoryURL = [containerURL URLByAppendingPathComponent:@"shareTempItems"];
-  if (![manager fileExistsAtPath:[tempDirectoryURL path]]) {
-    NSError *err;
-    [manager createDirectoryAtURL:tempDirectoryURL withIntermediateDirectories:YES attributes:nil error:&err];
-    if (err) {
-      return nil;
-    }
-  }
-  
-  return tempDirectoryURL;
 }
 @end

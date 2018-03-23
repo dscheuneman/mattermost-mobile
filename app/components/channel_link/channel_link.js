@@ -15,22 +15,22 @@ export default class ChannelLink extends React.PureComponent {
         channelsByName: PropTypes.object.isRequired,
         actions: PropTypes.shape({
             handleSelectChannel: PropTypes.func.isRequired,
-            setChannelDisplayName: PropTypes.func.isRequired
-        }).isRequired
+            setChannelDisplayName: PropTypes.func.isRequired,
+        }).isRequired,
     };
 
     constructor(props) {
         super(props);
 
         this.state = {
-            channel: this.getChannelFromChannelName(props)
+            channel: this.getChannelFromChannelName(props),
         };
     }
 
     componentWillReceiveProps(nextProps) {
         if (nextProps.channelName !== this.props.channelName || nextProps.channelsByName !== this.props.channelsByName) {
             this.setState({
-                channel: this.getChannelFromChannelName(nextProps)
+                channel: this.getChannelFromChannelName(nextProps),
             });
         }
     }
@@ -63,7 +63,7 @@ export default class ChannelLink extends React.PureComponent {
         const channel = this.state.channel;
 
         if (!channel) {
-            return <Text style={this.props.textStyle}>{'~' + this.props.channelName}</Text>;
+            return <Text style={this.props.textStyle}>{`~${this.props.channelName}`}</Text>;
         }
 
         const suffix = this.props.channelName.substring(channel.name.length);
@@ -74,7 +74,7 @@ export default class ChannelLink extends React.PureComponent {
                     style={this.props.linkStyle}
                     onPress={this.handlePress}
                 >
-                    {channel.display_name}
+                    {`~${channel.display_name}`}
                 </Text>
                 {suffix}
             </Text>
