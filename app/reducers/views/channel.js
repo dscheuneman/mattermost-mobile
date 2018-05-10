@@ -13,7 +13,7 @@ import {ViewTypes} from 'app/constants';
 function displayName(state = '', action) {
     switch (action.type) {
     case ViewTypes.SET_CHANNEL_DISPLAY_NAME:
-        return action.displayName;
+        return action.displayName || '';
     default:
         return state;
     }
@@ -23,15 +23,6 @@ function handlePostDraftChanged(state, action) {
     return {
         ...state,
         [action.channelId]: Object.assign({}, state[action.channelId], {draft: action.draft}),
-    };
-}
-
-function handlePostDraftSelectionChanged(state, action) {
-    return {
-        ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {
-            cursorPosition: action.cursorPosition,
-        }),
     };
 }
 
@@ -114,6 +105,7 @@ function handleReceivedUploadFiles(state, action) {
             return {
                 ...file,
                 localPath: tempFile.localPath,
+                loading: false,
             };
         }
 
@@ -204,8 +196,6 @@ function drafts(state = {}, action) { // eslint-disable-line complexity
     switch (action.type) {
     case ViewTypes.POST_DRAFT_CHANGED:
         return handlePostDraftChanged(state, action);
-    case ViewTypes.POST_DRAFT_SELECTION_CHANGED:
-        return handlePostDraftSelectionChanged(state, action);
     case ViewTypes.SET_POST_DRAFT:
         return handleSetPostDraft(state, action);
     case ChannelTypes.SELECT_CHANNEL:

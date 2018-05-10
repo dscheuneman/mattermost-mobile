@@ -28,7 +28,7 @@ class ChannelMembers extends PureComponent {
         intl: intlShape.isRequired,
         theme: PropTypes.object.isRequired,
         currentChannel: PropTypes.object,
-        currentChannelMembers: PropTypes.array.isRequired,
+        currentChannelMembers: PropTypes.array,
         currentUserId: PropTypes.string.isRequired,
         navigator: PropTypes.object,
         requestStatus: PropTypes.string,
@@ -317,6 +317,7 @@ class ChannelMembers extends PureComponent {
                         onChangeText={this.searchProfiles}
                         onSearchButtonPress={this.searchProfiles}
                         onCancelButtonPress={this.cancelSearch}
+                        autoCapitalize='none'
                         value={term}
                     />
                 </View>

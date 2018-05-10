@@ -6,20 +6,16 @@ import PropTypes from 'prop-types';
 import {Alert, BackHandler, Keyboard, Platform, Text, TextInput, TouchableOpacity, View} from 'react-native';
 import {intlShape} from 'react-intl';
 import {RequestStatus} from 'mattermost-redux/constants';
+import EventEmitter from 'mattermost-redux/utils/event_emitter';
 
 import AttachmentButton from 'app/components/attachment_button';
 import Autocomplete from 'app/components/autocomplete';
 import FileUploadPreview from 'app/components/file_upload_preview';
 import PaperPlane from 'app/components/paper_plane';
+import {INITIAL_HEIGHT, INSERT_TO_COMMENT, INSERT_TO_DRAFT, IS_REACTION_REGEX, MAX_CONTENT_HEIGHT, MAX_FILE_COUNT} from 'app/constants/post_textbox';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 
 import Typing from './components/typing';
-
-const INITIAL_HEIGHT = Platform.OS === 'ios' ? 34 : 36;
-const MAX_CONTENT_HEIGHT = 100;
-const MAX_MESSAGE_LENGTH = 4000;
-const MAX_FILE_COUNT = 5;
-const IS_REACTION_REGEX = /(^\+:([^:\s]*):)$/i;
 
 export default class PostTextbox extends PureComponent {
     static propTypes = {
@@ -32,17 +28,18 @@ export default class PostTextbox extends PureComponent {
             handleClearFiles: PropTypes.func.isRequired,
             handleClearFailedFiles: PropTypes.func.isRequired,
             handleRemoveLastFile: PropTypes.func.isRequired,
-            handleUploadFiles: PropTypes.func.isRequired,
+            initUploadFiles: PropTypes.func.isRequired,
             userTyping: PropTypes.func.isRequired,
-            handlePostDraftSelectionChanged: PropTypes.func.isRequired,
             handleCommentDraftSelectionChanged: PropTypes.func.isRequired,
         }).isRequired,
         canUploadFiles: PropTypes.bool.isRequired,
         channelId: PropTypes.string.isRequired,
-        channelIsLoading: PropTypes.bool.isRequired,
+        channelIsLoading: PropTypes.bool,
+        channelIsReadOnly: PropTypes.bool.isRequired,
         currentUserId: PropTypes.string.isRequired,
         deactivatedChannel: PropTypes.bool.isRequired,
         files: PropTypes.array,
+        maxMessageLength: PropTypes.number.isRequired,
         navigator: PropTypes.object,
         rootId: PropTypes.string,
         theme: PropTypes.object.isRequired,
@@ -65,6 +62,7 @@ export default class PostTextbox extends PureComponent {
 
         this.state = {
             contentHeight: INITIAL_HEIGHT,
+            cursorPosition: 0,
             keyboardType: 'default',
             value: props.value,
             showFileMaxWarning: false,
@@ -72,6 +70,8 @@ export default class PostTextbox extends PureComponent {
     }
 
     componentDidMount() {
+        const event = this.props.rootId ? INSERT_TO_COMMENT : INSERT_TO_DRAFT;
+        EventEmitter.on(event, this.handleInsertTextToDraft);
         if (Platform.OS === 'android') {
             Keyboard.addListener('keyboardDidHide', this.handleAndroidKeyboard);
             BackHandler.addEventListener('hardwareBackPress', this.handleAndroidBack);
@@ -85,6 +85,8 @@ export default class PostTextbox extends PureComponent {
     }
 
     componentWillUnmount() {
+        const event = this.props.rootId ? INSERT_TO_COMMENT : INSERT_TO_DRAFT;
+        EventEmitter.off(event, this.handleInsertTextToDraft);
         if (Platform.OS === 'android') {
             Keyboard.removeListener('keyboardDidHide', this.handleAndroidKeyboard);
             BackHandler.removeEventListener('hardwareBackPress', this.handleAndroidBack);
@@ -102,7 +104,7 @@ export default class PostTextbox extends PureComponent {
     };
 
     canSend = () => {
-        const {files, uploadFileRequestStatus} = this.props;
+        const {files, maxMessageLength, uploadFileRequestStatus} = this.props;
         const {value} = this.state;
         const valueLength = value.trim().length;
 
@@ -115,10 +117,10 @@ export default class PostTextbox extends PureComponent {
             });
 
             const loadingComplete = filesLoading.length === 0;
-            return valueLength <= MAX_MESSAGE_LENGTH && uploadFileRequestStatus !== RequestStatus.STARTED && loadingComplete;
+            return valueLength <= maxMessageLength && uploadFileRequestStatus !== RequestStatus.STARTED && loadingComplete;
         }
 
-        return valueLength > 0 && valueLength <= MAX_MESSAGE_LENGTH;
+        return valueLength > 0 && valueLength <= maxMessageLength;
     };
 
     changeDraft = (text) => {
@@ -137,9 +139,10 @@ export default class PostTextbox extends PureComponent {
 
     checkMessageLength = (value) => {
         const {intl} = this.context;
+        const {maxMessageLength} = this.props;
         const valueLength = value.trim().length;
 
-        if (valueLength > MAX_MESSAGE_LENGTH) {
+        if (valueLength > maxMessageLength) {
             Alert.alert(
                 intl.formatMessage({
                     id: 'mobile.message_length.title',
@@ -149,7 +152,7 @@ export default class PostTextbox extends PureComponent {
                     id: 'mobile.message_length.message',
                     defaultMessage: 'Your current message is too long. Current character count: {max}/{count}',
                 }, {
-                    max: MAX_MESSAGE_LENGTH,
+                    max: maxMessageLength,
                     count: valueLength,
                 })
             );
@@ -170,16 +173,16 @@ export default class PostTextbox extends PureComponent {
     };
 
     handleContentSizeChange = (event) => {
-        let contentHeight = event.nativeEvent.contentSize.height;
-        if (contentHeight < INITIAL_HEIGHT) {
-            contentHeight = INITIAL_HEIGHT;
-        } else if (Platform.OS === 'ios') {
-            contentHeight += 5;
-        }
+        if (Platform.OS === 'android') {
+            let contentHeight = event.nativeEvent.contentSize.height;
+            if (contentHeight < INITIAL_HEIGHT) {
+                contentHeight = INITIAL_HEIGHT;
+            }
 
-        this.setState({
-            contentHeight,
-        });
+            this.setState({
+                contentHeight,
+            });
+        }
     };
 
     handleEndEditing = (e) => {
@@ -190,13 +193,9 @@ export default class PostTextbox extends PureComponent {
 
     handlePostDraftSelectionChanged = (event) => {
         const cursorPosition = event.nativeEvent.selection.end;
-        if (this.props.rootId) {
-            this.props.actions.handleCommentDraftSelectionChanged(this.props.rootId, cursorPosition);
-        } else {
-            this.props.actions.handlePostDraftSelectionChanged(this.props.channelId, cursorPosition);
-        }
-
-        this.autocomplete.getWrappedInstance().handleSelectionChange(event);
+        this.setState({
+            cursorPosition,
+        });
     };
 
     handleSendMessage = () => {
@@ -243,6 +242,23 @@ export default class PostTextbox extends PureComponent {
         }
     };
 
+    handleInsertTextToDraft = (text) => {
+        const {cursorPosition, value} = this.state;
+
+        let completed;
+        if (value.length === 0) {
+            completed = text;
+        } else {
+            const firstPart = value.substring(0, cursorPosition);
+            const secondPart = value.substring(cursorPosition);
+            completed = `${firstPart}${text}${secondPart}`;
+        }
+
+        this.setState({
+            value: completed,
+        });
+    }
+
     handleTextChange = (value) => {
         const {
             actions,
@@ -259,7 +275,7 @@ export default class PostTextbox extends PureComponent {
     };
 
     handleUploadFiles = (images) => {
-        this.props.actions.handleUploadFiles(images, this.props.rootId);
+        this.props.actions.initUploadFiles(images, this.props.rootId);
     };
 
     renderSendButton = () => {
@@ -396,6 +412,7 @@ export default class PostTextbox extends PureComponent {
             canUploadFiles,
             channelId,
             channelIsLoading,
+            channelIsReadOnly,
             deactivatedChannel,
             files,
             navigator,
@@ -415,13 +432,15 @@ export default class PostTextbox extends PureComponent {
             );
         }
 
-        const {showFileMaxWarning} = this.state;
+        const {contentHeight, cursorPosition, showFileMaxWarning, value} = this.state;
 
-        const textInputHeight = Math.min(this.state.contentHeight, MAX_CONTENT_HEIGHT);
-        const textValue = channelIsLoading ? '' : this.state.value;
+        const textInputHeight = Math.min(contentHeight, MAX_CONTENT_HEIGHT);
+        const textValue = channelIsLoading ? '' : value;
 
         let placeholder;
-        if (rootId) {
+        if (channelIsReadOnly) {
+            placeholder = {id: 'mobile.create_post.read_only', defaultMessage: 'This channel is read-only.'};
+        } else if (rootId) {
             placeholder = {id: 'create_comment.addComment', defaultMessage: 'Add a comment...'};
         } else {
             placeholder = {id: 'create_post.write', defaultMessage: 'Write a message...'};
@@ -457,13 +476,14 @@ export default class PostTextbox extends PureComponent {
                 />
                 <Autocomplete
                     ref={this.attachAutocomplete}
+                    cursorPosition={cursorPosition}
                     onChangeText={this.handleTextChange}
                     value={this.state.value}
                     rootId={rootId}
                 />
                 <View style={style.inputWrapper}>
-                    {attachmentButton}
-                    <View style={inputContainerStyle}>
+                    {!channelIsReadOnly && attachmentButton}
+                    <View style={[inputContainerStyle, (channelIsReadOnly && {marginLeft: 10})]}>
                         <TextInput
                             ref='input'
                             value={textValue}
@@ -475,11 +495,12 @@ export default class PostTextbox extends PureComponent {
                             numberOfLines={5}
                             blurOnSubmit={false}
                             underlineColorAndroid='transparent'
-                            style={[style.input, {height: textInputHeight}]}
+                            style={[style.input, Platform.OS === 'android' ? {height: textInputHeight} : {maxHeight: MAX_CONTENT_HEIGHT}]}
                             onContentSizeChange={this.handleContentSizeChange}
                             keyboardType={this.state.keyboardType}
                             onEndEditing={this.handleEndEditing}
                             disableFullscreenUI={true}
+                            editable={!channelIsReadOnly}
                         />
                         {this.renderSendButton()}
                     </View>
