@@ -1,4 +1,4 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
 // See License.txt for license information.
 
 import React, {PureComponent} from 'react';
@@ -15,19 +15,22 @@ import {intlShape} from 'react-intl';
 import Icon from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 
-import FileAttachmentList from 'app/components/file_attachment_list';
+import {Posts} from 'mattermost-redux/constants';
+
+import CombinedSystemMessage from 'app/components/combined_system_message';
 import FormattedText from 'app/components/formatted_text';
 import Markdown from 'app/components/markdown';
 import OptionsContext from 'app/components/options_context';
-import PostAddChannelMember from 'app/components/post_add_channel_member';
-
-import PostBodyAdditionalContent from 'app/components/post_body_additional_content';
 
 import {emptyFunction} from 'app/utils/general';
 import {getMarkdownTextStyles, getMarkdownBlockStyles} from 'app/utils/markdown';
 import {preventDoubleTap} from 'app/utils/tap';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
-import Reactions from 'app/components/reactions';
+
+let FileAttachmentList;
+let PostAddChannelMember;
+let PostBodyAdditionalContent;
+let Reactions;
 
 export default class PostBody extends PureComponent {
     static propTypes = {
@@ -65,6 +68,7 @@ export default class PostBody extends PureComponent {
         onPress: PropTypes.func,
         postId: PropTypes.string.isRequired,
         postProps: PropTypes.object,
+        postType: PropTypes.string,
         renderReplyBar: PropTypes.func,
         showAddReaction: PropTypes.bool,
         showLongPost: PropTypes.bool.isRequired,
@@ -187,7 +191,7 @@ export default class PostBody extends PureComponent {
         const {height: deviceHeight} = Dimensions.get('window');
         const {showLongPost} = this.props;
 
-        if (!showLongPost && height >= 1000) {
+        if (!showLongPost && height >= (deviceHeight * 1.2)) {
             this.setState({
                 isLongPost: true,
                 maxHeight: (deviceHeight * 0.6),
@@ -229,6 +233,31 @@ export default class PostBody extends PureComponent {
         }
     };
 
+    renderAddChannelMember = (style, textStyles) => {
+        const {onPermalinkPress, onPress, postProps} = this.props;
+
+        if (!PostAddChannelMember) {
+            PostAddChannelMember = require('app/components/post_add_channel_member').default;
+        }
+
+        return (
+            <View style={style.row}>
+                <View style={style.flex}>
+                    <PostAddChannelMember
+                        navigator={navigator}
+                        onLongPress={this.showOptionsContext}
+                        onPermalinkPress={onPermalinkPress}
+                        onPostPress={onPress}
+                        textStyles={textStyles}
+                        postId={postProps.add_channel_member.post_id}
+                        userIds={postProps.add_channel_member.user_ids}
+                        usernames={postProps.add_channel_member.usernames}
+                    />
+                </View>
+            </View>
+        );
+    };
+
     renderFileAttachments() {
         const {
             fileIds,
@@ -246,6 +275,10 @@ export default class PostBody extends PureComponent {
 
         let attachments;
         if (fileIds.length > 0) {
+            if (!FileAttachmentList) {
+                FileAttachmentList = require('app/components/file_attachment_list').default;
+            }
+
             attachments = (
                 <FileAttachmentList
                     fileIds={fileIds}
@@ -264,6 +297,10 @@ export default class PostBody extends PureComponent {
 
     renderPostAdditionalContent = (blockStyles, messageStyle, textStyles) => {
         const {isReplyPost, message, navigator, onPermalinkPress, postId, postProps} = this.props;
+
+        if (!PostBodyAdditionalContent) {
+            PostBodyAdditionalContent = require('app/components/post_body_additional_content').default;
+        }
 
         return (
             <PostBodyAdditionalContent
@@ -286,6 +323,10 @@ export default class PostBody extends PureComponent {
 
         if (!hasReactions || isSearchResult || showLongPost) {
             return null;
+        }
+
+        if (!Reactions) {
+            Reactions = require('app/components/reactions').default;
         }
 
         return (
@@ -365,6 +406,7 @@ export default class PostBody extends PureComponent {
             onPermalinkPress,
             onPress,
             postProps,
+            postType,
             renderReplyBar,
             theme,
             toggleSelected,
@@ -397,18 +439,17 @@ export default class PostBody extends PureComponent {
             );
             body = (<View>{messageComponent}</View>);
         } else if (isPostAddChannelMember) {
+            messageComponent = this.renderAddChannelMember(style, textStyles);
+        } else if (postType === Posts.POST_TYPES.COMBINED_USER_ACTIVITY) {
+            const {allUserIds, messageData} = postProps.user_activity;
             messageComponent = (
                 <View style={style.row}>
                     <View style={style.flex}>
-                        <PostAddChannelMember
-                            navigator={navigator}
-                            onLongPress={this.showOptionsContext}
-                            onPermalinkPress={onPermalinkPress}
-                            onPostPress={onPress}
-                            textStyles={textStyles}
-                            postId={postProps.add_channel_member.post_id}
-                            userIds={postProps.add_channel_member.user_ids}
-                            usernames={postProps.add_channel_member.usernames}
+                        <CombinedSystemMessage
+                            allUserIds={allUserIds}
+                            linkStyle={textStyles.link}
+                            messageData={messageData}
+                            theme={theme}
                         />
                     </View>
                 </View>
