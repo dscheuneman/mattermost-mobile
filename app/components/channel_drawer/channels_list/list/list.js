@@ -148,13 +148,13 @@ export default class List extends PureComponent {
         });
         
     // revdave section -----------------
-        sections.push({
-            id: 'sidebar.pg',
-            defaultMessage: 'CUSTOM',
-            data: '<View><Text>wootXX</Text></View>',
-            topSeparator: true,
-            bottomSeparator: true,
-        });
+   //     sections.push({
+   //         id: 'sidebar.pg',
+   //         defaultMessage: 'CUSTOM',
+   //         data: 'dunno what goes here!',
+   //         topSeparator: true,
+   //         bottomSeparator: true,
+   //     });
 
         return sections;
     };
