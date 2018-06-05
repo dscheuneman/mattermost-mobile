@@ -20,6 +20,7 @@ import ChannelItem from 'app/components/channel_drawer/channels_list/channel_ite
 import {ListTypes} from 'app/constants';
 import {preventDoubleTap} from 'app/utils/tap';
 import {changeOpacity} from 'app/utils/theme';
+import Zero from 'app/components/zero/zero.js'; //ds custom
 
 const VIEWABILITY_CONFIG = {
     ...ListTypes.VISIBILITY_CONFIG_DEFAULTS,
@@ -341,6 +342,7 @@ export default class List extends PureComponent {
                 style={styles.container}
                 onLayout={this.onLayout}
             >
+                <Zero /> //ds custom
                 <SectionList
                     ref='list'
                     sections={sections}
