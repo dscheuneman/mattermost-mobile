@@ -19,9 +19,7 @@ export default class Zero extends PureComponent {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    flexDirection: 'row',
-    height: 44,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
   }
 });
