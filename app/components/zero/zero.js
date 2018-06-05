@@ -10,7 +10,7 @@ export default class Zero extends PureComponent {
   render() {
     return (
       <View style={styles.container}>
-      <Text>Woot Component!</Text>
+      <Text style={styles.text}>Woot Component!</Text>
       </View>
     );
   }
@@ -18,6 +18,15 @@ export default class Zero extends PureComponent {
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
+    alignItems: 'center'
+  },
+  text: {
+            color: white,
+            fontSize: 14,
+            fontWeight: '600',
+            paddingRight: 40,
+            height: '100%',
+            textAlignVertical: 'center',
+            lineHeight: 44
   }
 });
