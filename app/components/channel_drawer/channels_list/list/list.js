@@ -146,6 +146,15 @@ export default class List extends PureComponent {
             topSeparator: true,
             bottomSeparator: directChannelIds.length > 0,
         });
+        
+    // revdave section -----------------
+        sections.push({
+            id: 'sidebar.pg',
+            defaultMessage: 'CUSTOM',
+            data: '<View><Text>wootXX</Text></View>',
+            topSeparator: true,
+            bottomSeparator: true,
+        });
 
         return sections;
     };
@@ -342,7 +351,7 @@ export default class List extends PureComponent {
                 style={styles.container}
                 onLayout={this.onLayout}
             >
-                <Zero /> //ds custom
+                <Zero />
                 <SectionList
                     ref='list'
                     sections={sections}
