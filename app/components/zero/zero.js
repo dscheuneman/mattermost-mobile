@@ -23,10 +23,6 @@ const styles = StyleSheet.create({
   text: {
             color: 'white',
             fontSize: 14,
-            fontWeight: '600',
-            paddingRight: 40,
-            height: '100%',
-            textAlignVertical: 'center',
-            lineHeight: 44
+            fontWeight: '600'
   }
 });
